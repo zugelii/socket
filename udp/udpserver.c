@@ -24,7 +24,7 @@ int main()
 {
 	struct sockaddr_in sin,cin;
 	int s_fd;
-	int port = 3000;
+	int port = 8000;
 	socklen_t addr_len;
 	char buf[MAX_LINE];
 	char addr_p[INET_ADDRSTRLEN];  //ip地址的存放缓冲区
