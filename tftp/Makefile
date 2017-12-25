@@ -1,17 +1,19 @@
 CC = gcc
 CFLAG = -I .
 DEFS = tftp.h
+T1 = tftpserver
+T2 = tftpclient
 
-all : server client
+all : $(T1) $(T2)
 
 %.o : %.c $(DEFS)
 	$(CC) -c $< -o $@ $(CFLAG)
 
-server : tftpserver.o
-	$(CC) -o server $(CFLAG)  tftpserver.o
-client : tftpclient.o
-	$(CC) -o client $(CFLAG) tftpclient.o
+$(T1) : $(T1).o
+	$(CC) -o $(T1) $(CFLAG)  $(T1).o
+$(T2) : $(T2).o
+	$(CC) -o $(T2) $(CFLAG) $(T2).o
 	
 clean: all
-	rm *.o server client
+	rm *.o $(T2) $(T2)
 .PHONY: clean

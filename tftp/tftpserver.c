@@ -8,82 +8,19 @@
 #include <errno.h>
 #include <sys/select.h>
 #define MAX_LINE 100
-
-typedef unsigned   char    u8_t;
-typedef signed     char    s8_t;
-typedef unsigned   short   u16_t;
-typedef signed     short   s16_t;
-typedef unsigned   int    u32_t;
-typedef signed     int    s32_t;
-
-
-#define MFS_MODE_READ 0
-#define MFS_MODE_WRITE 1
-
-#define TFTP_OPCODE_LEN         2
-#define TFTP_BLKNUM_LEN         2
-#define TFTP_ERRCODE_LEN        2
-#define TFTP_DATA_LEN_MAX       512
-#define TFTP_DATA_PKT_HDR_LEN   (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
-#define TFTP_ERR_PKT_HDR_LEN    (TFTP_OPCODE_LEN + TFTP_ERRCODE_LEN)
-#define TFTP_ACK_PKT_LEN        (TFTP_OPCODE_LEN + TFTP_BLKNUM_LEN)
-#define TFTP_DATA_PKT_LEN_MAX   (TFTP_DATA_PKT_HDR_LEN + TFTP_DATA_LEN_MAX)
-#define TFTP_MAX_RETRIES        3
-#define TFTP_TIMEOUT_INTERVAL   5
-
-/* TFTP opcodes as specified in RFC1350   */
-typedef enum {
-  TFTP_RRQ = 1,
-  TFTP_WRQ = 2,
-  TFTP_DATA = 3,
-  TFTP_ACK = 4,
-  TFTP_ERROR = 5
-} tftp_opcode;
-
-
-/* TFTP error codes as specified in RFC1350  */
-typedef enum {
-  TFTP_ERR_NOTDEFINED,
-  TFTP_ERR_FILE_NOT_FOUND,
-  TFTP_ERR_ACCESS_VIOLATION,
-  TFTP_ERR_DISKFULL,
-  TFTP_ERR_ILLEGALOP,
-  TFTP_ERR_UKNOWN_TRANSFER_ID,
-  TFTP_ERR_FILE_ALREADY_EXISTS,
-  TFTP_ERR_NO_SUCH_USER,
-} tftp_errorcode;
+#define TFTP_PORT 8000
 
 
 
-typedef struct
-{
-  int op;    /* RRQ/WRQ */
 
-  /* last block read */
-  char data[TFTP_DATA_PKT_LEN_MAX];
-  int  data_len;
-  
-  
-
-  /* next block number */
-  u16_t block;
-
-  /* total number of bytes transferred */
-  u32_t tot_bytes;
-  int c_fd; //
-  u16_t remote_port;
-  struct sockaddr c_addr;
-}tftp_connection_args;
-
-typedef struct tftp_data
-{
-	tftp_connection_args tftp_p;
-	tftp_data *next;
-}TFTPD,*PTFTPD;
 
 fd_set read_set,write_set;
 PTFTPD client_head;
-#if 0
+
+tftp_connection_args *tftp_quene;
+
+int max_fd;
+
 tftp_opcode tftp_decode_op(char *buf)
 {
 	return (tftp_opcode)(buf[1]);
@@ -153,7 +90,7 @@ int tftp_send_message(int s_fd, struct sockaddr * addr, char *buf, int buflen)
 	int n;
 	char buf_loc = (char *)malloc(buflen);
 	memcpy(buf_loc, buf, buflen);
-	n = sendto(s_fd, buf_loc, n, 0, addr, sizeof(struct sockaddr));
+	n = sendto(s_fd, buf_loc, n, 0, addr, sizeof(struct sockaddr)); //
 	free(buf_loc);
 	return n;
 }
@@ -190,7 +127,7 @@ int tftp_send_error_message(int s_fd, struct sockaddr *to, tftp_errorcode err)
 
 
 /* construct and send a data packet */
-int tftp_send_data_packet(int s_fd, struct sockaddr *to, int block, char *buf, int buflen)
+int tftp_send_data_packet(int s_fd,  struct sockeaddr *to,  int block, char *buf, int buflen)
 {
   //char packet[TFTP_DATA_PKT_LEN_MAX]; /* (512+4) bytes */
   //memset(packet, 'a', TFTP_DATA_PKT_LEN_MAX);
@@ -202,7 +139,7 @@ int tftp_send_data_packet(int s_fd, struct sockaddr *to, int block, char *buf, i
   //@@@@tftp_set_data_message(packet, buf, buflen);
   //tftp_set_data_message(packet, packet, buflen);
   /* SEndTransferthe DATA packet */
-  return tftp_send_message(s_fd, to, buf, buflen + 4);
+  return tftp_send_message(s_fd, struct sockeaddr *to, buf, buflen + 4);
 }
 
 
@@ -240,36 +177,36 @@ void tftp_cleanup_wr(tftp_connection_args *args)
   free(args);
 }
 
-void tftp_send_next_block(int s_fd, tftp_connection_args *args, struct sockaddr *to_addr)
+void tftp_send_next_block(PTFTPD tftp_buf)
 {
   /* Function to read 512 bytes from the file to sEndTransfer(file_SD), put them
    * in "args->data" and return the number of bytes read */
   //@@@@args->data_len = file_read(&file_SD, TFTP_DATA_LEN_MAX, (euint8*)args->data);
-  int total_block = args->tot_bytes/TFTP_DATA_LEN_MAX;
+  int total_block = tftp_buf->tftp_p.tot_bytes/TFTP_DATA_LEN_MAX;
   total_block +=1;
   //if(args->tot_bytes%TFTP_DATA_LEN_MAX != 0)
   //{
 //		total_block += 1;
   //}
 
-  if(total_block < 1 || args->block > total_block )
+  if(total_block < 1 || tftp_buf->tftp_p.block > total_block )
   {
        return;
   }
 
-  args->data_len = TFTP_DATA_LEN_MAX;
-  if(total_block == args->block)
+  tftp_buf->tftp_p.data_len = TFTP_DATA_LEN_MAX;
+  if(total_block == tftp_buf->tftp_p.block)
   {
-	   if(args->tot_bytes%TFTP_DATA_LEN_MAX == 0)
+	   if(tftp_buf->tftp_p.tot_bytes%TFTP_DATA_LEN_MAX == 0)
 	   {
-	       args->data_len = 0;
+	       tftp_buf->tftp_p.data_len = 0;
 	   }else
 	   {
-	       args->data_len = args->tot_bytes - (total_block - 1)*TFTP_DATA_LEN_MAX;
+	       tftp_buf->tftp_p.data_len = tftp_buf->tftp_p.tot_bytes - (total_block - 1)*TFTP_DATA_LEN_MAX;
 	   }
   }
   
-  memset(args->data + TFTP_DATA_PKT_HDR_LEN, ('a'-1) + args->block%26 , args->data_len);
+  memset(tftp_buf->tftp_p.data + TFTP_DATA_PKT_HDR_LEN, ('a'-1) + tftp_buf->tftp_p.block%26 , tftp_buf->tftp_p.data_len);
   /*   NOTE: We need to sEndTransferanother data packet even if args->data_len = 0
      The reason for this is as follows:
      1) This function is only ever called if the previous packet payload was
@@ -283,10 +220,10 @@ void tftp_send_next_block(int s_fd, tftp_connection_args *args, struct sockaddr 
 
 
   /* sEndTransferthe data */
-  tftp_send_data_packet(s_fd, to_addr, args->block, args->data, args->data_len);
+  tftp_send_data_packet(tftp_buf->tftp_p.c_fd, &(tftp_buf->tftp_p.c_addr), tftp_buf->tftp_p.block, tftp_buf->tftp_p.data, tftp_buf->tftp_p.data_len);
 
 }
-#if 0
+
 void rrq_recv_callback(void *_args, int s_fd, struct pbuf *p, struct sockaddr *c_addr)
 {
   /* Get our connection state  */
@@ -331,11 +268,9 @@ void rrq_recv_callback(void *_args, int s_fd, struct pbuf *p, struct sockaddr *c
 
 }
 
-int tftp_process_read(struct udp_pcb *upcb, struct ip_addr *to, int to_port, char* FileName)
+int tftp_process_read(PTFTPD tftp_buf, char* FileName)
 {
-  tftp_connection_args *args = NULL;
-
-  /* If Could not open the file which will be transmitted  */
+  /* If Could not open the file which will be transmitted  
   //@@@@if (file_fopen(&file_SD, &efs1.myFs, FileName, 'r') != 0)
   if(0)
   {
@@ -345,46 +280,25 @@ int tftp_process_read(struct udp_pcb *upcb, struct ip_addr *to, int to_port, cha
 
     return 0;
   }
+  */
 
-  /* This function is called from a callback,
-   * therefore, interrupts are disabled,
-   * therefore, we can use regular malloc. */
-
-  args = mem_malloc(sizeof(tftp_connection_args));
-  /* If we aren't able to allocate memory for a "tftp_connection_args" */
-  if (!args)
-  {
-    /* unable to allocate memory for tftp args  */
-    tftp_send_error_message(to, to_port, TFTP_ERR_NOTDEFINED);
-
-    /* no need to use tftp_cleanup_rd because no 
-            "tftp_connection_args" struct has been malloc'd   */
-    tftp_cleanup_rd(upcb, args);
-
-    return 0;
-  }
 
   /* initialize connection structure  */
-  args->op = TFTP_RRQ;
-  //args->to_ip.addr = to->addr;
-  args->remote_port = to_port;
-  args->block = 1; /* block number starts at 1 (not 0) according to RFC1350  */
-  args->tot_bytes = 1024*1024;
+  tftp_buf->tftp_p.op = TFTP_RRQ;
 
-
-  /* set callback for receives on this UDP PCB (Protocol Control Block) */
-  udp_recv(upcb, rrq_recv_callback, args);
+  tftp_buf->tftp_p.block = 1; /* block number starts at 1 (not 0) according to RFC1350  */
+  tftp_buf->tftp_p.tot_bytes = 1024*1024;
 
   /* initiate the transaction by sending the first block of data
    * further blocks will be sent when ACKs are received
    *   - the receive callbacks need to get the proper state    */
 
-  tftp_send_next_block(upcb, args, to, to_port);
+  tftp_send_next_block(tftp_buf);
 
   return 1;
 }
-#endif
-#if 0
+
+
 void wrq_recv_callback(void *_args, struct udp_pcb *upcb, struct pbuf *pkt_buf, struct ip_addr *addr, u16_t port)
 {
   tftp_connection_args *args = (tftp_connection_args *)_args;
@@ -504,30 +418,71 @@ int tftp_process_write(struct udp_pcb *upcb, struct ip_addr *to, int to_port, ch
 
   return 0;
 }
-#endif
 
-#endif
-tftp_connection_args *tftp_quene;
+
 void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
 {
-  tftp_opcode op = tftp_decode_op(pkt_buf->payload);
-  char FileName[50] = {0};
-  struct udp_pcb *upcb = NULL;
-  err_t err;
-  u32_t IPaddress;
-  char addr_p[INET_ADDRSTRLEN];
+	tftp_opcode op = tftp_decode_op(pkt_buf->payload);
+	char FileName[50] = {0};
+	struct udp_pcb *upcb = NULL;
+	err_t err;
+	u32_t IPaddress;
+	char addr_p[INET_ADDRSTRLEN];
+	PTFTPD tftp_data,tftp_tmp;
+	sockaddr_in sin;
+	int s_fd;
+	inet_ntop(AF_INET, (struct sockaddr*)cin->sin_addr, addr_p, sizeof(addr_p));//将客户端IP地址转换为字符串
+	printf("TFTP RRQ from: %s, port is %d\n",addr_p, ntohs((struct sockaddr*)cin->sin_port));
+	printf("client msg is:%s", buf); //客户端的消息	
+	tftp_data = (PTFTPD *)malloc(sizeof(TFTPD));
+	if(tftp_buf == NULL)
+	{
+		printf("can not malloc tftp\n");
+		return 0;
+	}
+	tftp_data->next = NULL;
+	tftp_data->tftp_p.c_addr = *cin;
 
-  inet_ntop(AF_INET, (struct sockaddr*)cin->sin_addr, addr_p, sizeof(addr_p));//将客户端IP地址转换为字符串
-  printf("TFTP RRQ from: %s, port is %d\n",addr_p, ntohs((struct sockaddr*)cin->sin_port));
-  printf("client msg is:%s", buf); //客户端的消息	
-  PTFTPD tftp_buf = (PTFTPD *)malloc(sizeof(TFTPD));
-  if(tftp_buf == NULL)
-  {
-  	printf("can not malloc tftp\n");
-  	return 0;
-  }
-  tftp_buf->next = NULL;
-  tftp_buf->
+	// insert client 
+	if(client_head->next == NULL)
+	{
+		client_head->next = tftp_data;
+	}
+	else
+	{
+		tftp_tmp = client_head;
+		while(tftp_tmp->next != NULL)
+		{
+			tftp_tmp = tftp_tmp->next;
+		}
+		tftp_tmp->next = tftp_data;
+	}
+	//bind local port
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(TFTP_PORT + 10);
+	sin.sin_addr.s_addr = htonl(INADDR_ANY);
+	s_fd = socket(AF_INET, SOCK_DGRAM, 0);  //创建套接字
+
+	if(s_fd < 0)
+	{
+		printf("can not creat socket\r\n");
+		return -1;
+	}
+
+	if(bind(s_fd, sin, sizeof(*sin)) == -1)
+	{
+		printf("can't bind\r\n");
+		return -1;
+	}
+
+	tftp_data->tftp_p.local_port = sin.sin_port;
+	tftp_data->tftp_p.c_fd = s_fd;
+	if(s_fd > max_fd)
+	{
+		max_fd = s_fd;
+	}
+	FD_SET(s_fd, &read_set); //add s_fd to select
   tftp_extract_filename(FileName, pkt_buf->payload);
 
   switch (op)
@@ -536,27 +491,9 @@ void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
     case TFTP_RRQ:    /* TFTP RRQ (read request)  */
       /* Read the name of the file asked by the client 
                             to be sent from the SD card */
-      //tftp_extract_filename(FileName, pkt_buf->payload);
-
-      //printf("\n\rTFTP RRQ (read request)");
-      //printf("\n\rONLY EFS filesystem(NTFS in WinXp) is support");
-      
-      /* If Could not open filesystem */
-      //@@@@if (efs_init(&efs1, 0) != 0)
-      //@@@@{
-      //@@@@printf("\n\rIf Could not open filesystem");
-      //@@@@return;
-      //@@@@}
-      
-      /* If Could not open the selected directory */
-      //@@@@if (ls_openDir(&list1, &(efs1.myFs), "/") != 0)
-      //@@@@{
-      //@@@@  printf("\n\rIf Could not open the selected directory");
-      //@@@@  return;
-      //@@@@}
       /* Start the TFTP read mode*/
       printf("\n\rTFTP client start to read file..[%s]..", FileName);
-      tftp_process_read(upcb, addr, port, FileName);
+	  tftp_process_read(tftp_data, FileName);
       break;
 
     case TFTP_WRQ:    /* TFTP WRQ (write request)   */
@@ -593,9 +530,6 @@ void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
       break;
   }
 }
-
-
-#define TFTP_PORT 8000
 int  tftp_server_init(int *s_fd, struct sockaddr *sin)
 {
 	*s_fd = socket(AF_INET, SOCK_DGRAM, 0);  //创建套接字
@@ -623,7 +557,6 @@ int main()
 	char buf[MAX_LINE];
 	char addr_p[INET_ADDRSTRLEN];  //ip地址的存放缓冲区
 	int n;
-	int max_fd;
 	struct timeval tv;
 	int res_sel;
 
@@ -633,7 +566,7 @@ int main()
 	FD_ZERO(&read_set);
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
-	sin.sin_port = htons(8000);
+	sin.sin_port = htons(TFTP_PORT);
 	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 	tftp_server_init(&s_fd, (struct sockaddr *)&sin) 
 	FD_SET(s_fd, &read_set);
@@ -651,7 +584,7 @@ int main()
 		}
 		else
 		{
-			if(FD_ISSET(s_fd, &read_set))  //客户机请求接入
+			if(FD_ISSET(s_fd, &read_set))  //
 			{
 				n = recvfrom(s_fd, buf, MAX_LINE, 0, (struct sockaddr*)&cin, &addr_len);
 				if(n == -1)
