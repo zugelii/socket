@@ -15,7 +15,7 @@
 
 
 fd_set read_set,write_set;
-PTFTPD client_head;
+TFTPD client_head;
 
 tftp_connection_args *tftp_quene;
 
@@ -139,7 +139,7 @@ int tftp_send_data_packet(int s_fd,  struct sockeaddr *to,  int block, char *buf
   //@@@@tftp_set_data_message(packet, buf, buflen);
   //tftp_set_data_message(packet, packet, buflen);
   /* SEndTransferthe DATA packet */
-  return tftp_send_message(s_fd, struct sockeaddr *to, buf, buflen + 4);
+  return tftp_send_message(s_fd, to, buf, buflen + 4);
 }
 
 
@@ -224,7 +224,7 @@ void tftp_send_next_block(PTFTPD tftp_buf)
 
 }
 
-void rrq_recv_callback(void *_args, int s_fd, struct pbuf *p, struct sockaddr *c_addr)
+void rrq_recv_callback(void *_args, int s_fd, char *p, struct sockaddr *c_addr)
 {
   /* Get our connection state  */
   tftp_connection_args *args = (tftp_connection_args *)_args;
@@ -431,11 +431,11 @@ void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
 	PTFTPD tftp_data,tftp_tmp;
 	sockaddr_in sin;
 	int s_fd;
-	inet_ntop(AF_INET, (struct sockaddr*)cin->sin_addr, addr_p, sizeof(addr_p));//将客户端IP地址转换为字符串
+	inet_ntop(AF_INET, cin->sin_addr, addr_p, sizeof(addr_p));
 	printf("TFTP RRQ from: %s, port is %d\n",addr_p, ntohs((struct sockaddr*)cin->sin_port));
-	printf("client msg is:%s", buf); //客户端的消息	
+	printf("client msg is:%s", pkt_buf); 	
 	tftp_data = (PTFTPD *)malloc(sizeof(TFTPD));
-	if(tftp_buf == NULL)
+	if(tftp_data == NULL)
 	{
 		printf("can not malloc tftp\n");
 		return 0;
@@ -470,7 +470,7 @@ void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
 		return -1;
 	}
 
-	if(bind(s_fd, sin, sizeof(*sin)) == -1)
+	if(bind(s_fd, (struct sockaddr *)&sin, sizeof(struct sockaddr *)) == -1)
 	{
 		printf("can't bind\r\n");
 		return -1;
@@ -483,7 +483,7 @@ void process_tftp_request(char *pkt_buf, struct sockaddr *cin, u16_t len)
 		max_fd = s_fd;
 	}
 	FD_SET(s_fd, &read_set); //add s_fd to select
-  tftp_extract_filename(FileName, pkt_buf->payload);
+  tftp_extract_filename(FileName, pkt_buf);
 
   switch (op)
   {
@@ -559,8 +559,8 @@ int main()
 	int n;
 	struct timeval tv;
 	int res_sel;
-
-	client_head = (PTFTPD)malloc(sizeof(TFTPD));
+	PTFTPD tftp_tmp;
+	
 	client_head->next = NULL;
 
 	FD_ZERO(&read_set);
@@ -596,6 +596,15 @@ int main()
 					process_tftp_request(buf, (struct sockaddr*)&cin, addr_len);
 				}	
 			}
+			tftp_tmp = &client_head;
+			while(tftp_tmp->next != NULL)
+			{
+				tftp_tmp = tftp_tmp->next;
+				if(FD_ISSET(tftp_tmp.tftp_p.c_fd, &read_set))  //
+				{
+					rrq_recv_callback();
+				}
+			}
 		}
 
 /*
@@ -612,5 +621,8 @@ int main()
 	{
 		printf("fail to close socket\n");
 	}
+	
+	tftp_tmp = &client_head;
+	
 	return 0; 
 }
