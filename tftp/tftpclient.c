@@ -7,7 +7,7 @@
 
 #define BUF_LEN 512
 #define SERVER_PORT 8000
-#define SERVER_IP "127.0.0.1"
+
 
 void upd_msg_sender(int fd, struct sockaddr* dst)
 {

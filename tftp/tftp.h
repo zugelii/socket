@@ -23,7 +23,7 @@ typedef signed     int    s32_t;
 #define TFTP_MAX_RETRIES        3
 #define TFTP_TIMEOUT_INTERVAL   5
 #define TFTP_PORT 8000
-
+#define SERVER_IP "127.0.0.1"
 
 /* TFTP opcodes as specified in RFC1350   */
 typedef enum {
@@ -63,13 +63,13 @@ typedef struct
   u32_t tot_bytes;
   int c_fd; //
   u16_t local_port;
-  struct sockaddr c_addr;
+  struct sockaddr_in c_addr;
 }tftp_connection_args;
 
-typedef struct tftp_data
+typedef struct TFTPD
 {
 	tftp_connection_args tftp_p;
-	tftp_data *next;
+	struct TFTPD *next;
 }TFTPD,*PTFTPD;
   
 

@@ -42,21 +42,11 @@ int main()
 	memset(&ser_addr, 0, sizeof(ser_addr));
 	ser_addr.sin_family = AF_INET;
 	ser_addr.sin_port = htons(SERVER_PORT);
-	ser_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
+	//ser_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	ser_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+	printf("s_addr:%d\r\n", ser_addr.sin_addr.s_addr);
 	upd_msg_sender(client_fd,(struct sockaddr*)&ser_addr);
 
 	close(client_fd);
 	return 0;
-
-
-
-
-
-
-
-
-
-
-
 }
